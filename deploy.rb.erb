@@ -1,0 +1,123 @@
+# frozen_string_literal: true
+
+# rubocop:disable Layout/LineLength
+
+require 'mina/multistage'
+require 'mina/rails'
+require 'mina/git'
+require 'mina/rvm'
+require 'mina/bundler'
+require 'yaml'
+
+set :deploy_to, '/var/www/webapp'
+set :rail_env, 'production'
+set :application_name, '<%= original_app_name %>-webapp'
+set :repository, 'git@github.com:phanhaiquang/FIXME.git'
+set :branch, `git rev-parse --abbrev-ref HEAD`.chomp
+set :keep_releases, '2'
+
+set :rvm_path, '/home/deploy/.rvm/scripts/rvm'
+
+set :bundle_options, -> { '' }
+
+set :shared_dirs,
+    %w[tmp/pids tmp/sockets log public/assets public/packs public/system]
+set :shared_files,
+    %w[
+      config/application.yml
+      config/database.yml
+      config/puma_prod.rb
+      config/credentials.yml.enc
+      config/master.key
+    ]
+
+# This task is the environment that is loaded for all remote run commands, such as
+# `mina deploy` or `mina rake`.
+task :remote_environment do
+	invoke :'rvm:use', 'ruby-3.0.0@<%= original_app_name %>'
+end
+
+task yarn_install: :remote_environment do
+  comment 'Installing package.json files'
+  command "NODE_ENV=#{fetch(:rails_env)} yarn install --ignore-engines"
+end
+
+task assets_precompile: :remote_environment do
+  comment 'Precompiling assets'
+  command "NODE_ENV=#{fetch(:rails_env)} RAILS_ENV=#{fetch(:rails_env)} bundle exec rake assets:precompile"
+end
+
+set :bundle_bin, '/home/deploy/.rvm/rubies/ruby-3.0.0/bin/bundle'
+
+task :setup do
+  command "#{fetch(:bundle_bin)} config set deployment 'true'"
+  command "#{fetch(:bundle_bin)} config set path '#{fetch(:bundle_path)}'"
+  command "#{fetch(:bundle_bin)} config set without '#{fetch(:bundle_withouts)}'"
+  command 'sudo apt-get install -f libpq-dev'
+
+  run(:local) do
+    scp './config/application.yml',
+        "#{fetch(:user)}@#{fetch(:host)}:#{fetch(:deploy_to)}/shared/config/application.yml"
+  end
+  run(:local) do
+    scp './config/database.yml',
+        "#{fetch(:user)}@#{fetch(:host)}:#{fetch(:deploy_to)}/shared/config/database.yml"
+  end
+  run(:local) do
+    scp './config/puma_prod.rb',
+        "#{fetch(:user)}@#{fetch(:host)}:#{fetch(:deploy_to)}/shared/config/puma_prod.rb"
+  end
+  run(:local) do
+    scp './config/credentials.yml.enc',
+        "#{fetch(:user)}@#{fetch(:host)}:#{fetch(:deploy_to)}/shared/config/credentials.yml.enc"
+  end
+  run(:local) do
+    scp './config/master.key',
+        "#{fetch(:user)}@#{fetch(:host)}:#{fetch(:deploy_to)}/shared/config/master.key"
+  end
+  # FIXME: copy public.tar.gz to shared/public
+end
+
+task :notify_deploy_start do
+  run(:local) do
+    command "rake slack:send[\"\[Branch \\`#{fetch(:branch)}\\`\] deployed by \\``whoami`\\` ...\"]"
+  end
+end
+
+task :notify_deploy_finished do
+  run(:local) do
+    command "rake slack:send[\"\[Branch \\`#{fetch(:branch)}\\`\] deployed finished !\"]"
+  end
+end
+
+desc 'Deploys the current version to the server.'
+task :deploy do
+  # uncomment this line to make sure you pushed your local branch to the remote origin
+  invoke :'git:ensure_pushed'
+  invoke :notify_deploy_start
+  deploy do
+    invoke :'git:clone'
+    invoke :'deploy:link_shared_paths'
+    invoke :'bundle:install'
+    invoke :'rails:db_migrate'
+    invoke :yarn_install
+    invoke :assets_precompile
+    invoke :'deploy:cleanup'
+
+    # invoke :update_cron_jobs
+
+    on :launch do
+      in_path(fetch(:current_path)) do
+        command 'mkdir -p tmp/'
+        command 'touch tmp/restart.txt'
+        command 'sudo systemctl restart puma.service'
+        # command %(sudo systemctl restart cron.service)
+        # command %(sudo systemctl restart sidekiq)
+        # command %(sudo systemctl restart cable.service)
+      end
+    end
+  end
+  invoke :notify_deploy_finished
+end
+
+# rubocop:enable Layout/LineLength

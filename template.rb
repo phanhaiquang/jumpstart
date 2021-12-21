@@ -1,5 +1,15 @@
-require "fileutils"
-require "shellwords"
+# frozen_string_literal: true
+
+# rubocop:disable Lint/MissingCopEnableDirective
+# rubocop:disable Layout/LineLength
+# rubocop:disable Metrics/MethodLength
+# rubocop:disable Metrics/AbcSize
+# rubocop:disable Naming/HeredocDelimiterNaming
+# rubocop:disable Style/GuardClause
+# rubocop:disable Metrics/BlockLength
+
+require 'fileutils'
+require 'shellwords'
 
 # Copied from: https://github.com/mattbrictson/rails-template
 # Add this template directory to source_paths so that Thor actions like
@@ -8,14 +18,14 @@ require "shellwords"
 # In that case, use `git clone` to download them to a local temporary dir.
 def add_template_repository_to_source_path
   if __FILE__ =~ %r{\Ahttps?://}
-    require "tmpdir"
-    source_paths.unshift(tempdir = Dir.mktmpdir("jumpstart-"))
+    require 'tmpdir'
+    source_paths.unshift(tempdir = Dir.mktmpdir('jumpstart-'))
     at_exit { FileUtils.remove_entry(tempdir) }
     git clone: [
-      "--quiet",
-      "https://github.com/excid3/jumpstart.git",
+      '--quiet',
+      'https://github.com/phanhaiquang/jumpstart.git',
       tempdir
-    ].map(&:shellescape).join(" ")
+    ].map(&:shellescape).join(' ')
 
     if (branch = __FILE__[%r{jumpstart/(.+)/template.rb}, 1])
       Dir.chdir(tempdir) { git checkout: branch }
@@ -30,15 +40,15 @@ def rails_version
 end
 
 def rails_5?
-  Gem::Requirement.new(">= 5.2.0", "< 6.0.0.beta1").satisfied_by? rails_version
+  Gem::Requirement.new('>= 5.2.0', '< 6.0.0.beta1').satisfied_by? rails_version
 end
 
 def rails_6?
-  Gem::Requirement.new(">= 6.0.0.alpha", "< 7").satisfied_by? rails_version
+  Gem::Requirement.new('>= 6.0.0.alpha', '< 7').satisfied_by? rails_version
 end
 
 def rails_7?
-  Gem::Requirement.new(">= 7.0.0.alpha", "< 8").satisfied_by? rails_version
+  Gem::Requirement.new('>= 7.0.0.alpha', '< 8').satisfied_by? rails_version
 end
 
 def add_gems
@@ -64,74 +74,98 @@ def add_gems
   gem 'sitemap_generator', '~> 6.1'
   gem 'whenever', require: false
   gem 'responders', github: 'heartcombo/responders', branch: 'main'
-
-  if rails_5?
-    gsub_file "Gemfile", /gem 'sqlite3'/, "gem 'sqlite3', '~> 1.3.0'"
+  gem 'seedbank', '~> 0.5.0'
+  gem 'faker'
 
   # deployment
   gem 'mina', '~> 1.2'
   gem 'mina-multistage', require: false
 
+  gem_group :development do
+    # lint/fixer for ruby file
+    gem 'rubocop'
+    gem 'rubocop-rails', '~> 2.12'
+    gem 'rubocop-rspec', '~> 2.5'
+    gem 'rubocop-daemon'
+
+    # support checks for VSCode
+    gem 'solargraph'
   end
+
+  gsub_file 'Gemfile', /gem 'sqlite3'/, "gem 'sqlite3', '~> 1.3.0'" if rails_5?
 end
 
 def set_application_name
   # Add Application Name to Config
   if rails_5?
-    environment "config.application_name = Rails.application.class.parent_name"
+    environment 'config.application_name = Rails.application.class.parent_name'
   else
-    environment "config.application_name = Rails.application.class.module_parent_name"
+    environment 'config.application_name = Rails.application.class.module_parent_name'
   end
 
   # Announce the user where they can change the application name in the future.
-  puts "You can change application name inside: ./config/application.rb"
+  puts 'You can change application name inside: ./config/application.rb'
 end
 
 def add_users
   route "root to: 'home#index'"
-  generate "devise:install"
+  generate 'devise:install'
 
   # Configure Devise to handle TURBO_STREAM requests like HTML requests
-  inject_into_file "config/initializers/devise.rb", "  config.navigational_formats = ['/', :html, :turbo_stream]", after: "Devise.setup do |config|\n"
+  inject_into_file 'config/initializers/devise.rb',
+                   "  config.navigational_formats = ['/', :html, :turbo_stream]",
+                   after: "Devise.setup do |config|\n"
 
-  inject_into_file 'config/initializers/devise.rb', after: "# frozen_string_literal: true\n" do <<~EOF
-    class TurboFailureApp < Devise::FailureApp
-      def respond
-        if request_format == :turbo_stream
-          redirect
-        else
-          super
+  inject_into_file 'config/initializers/devise.rb',
+                   after: "# frozen_string_literal: true\n" do
+    <<~EOF
+      class TurboFailureApp < Devise::FailureApp
+        def respond
+          if request_format == :turbo_stream
+            redirect
+          else
+            super
+          end
+        end
+
+        def skip_format?
+          %w(html turbo_stream */*).include? request_format.to_s
         end
       end
-
-      def skip_format?
-        %w(html turbo_stream */*).include? request_format.to_s
-      end
-    end
-  EOF
+    EOF
   end
 
-  inject_into_file 'config/initializers/devise.rb', after: "# ==> Warden configuration\n" do <<-EOF
+  inject_into_file 'config/initializers/devise.rb',
+                   after: "# ==> Warden configuration\n" do
+    <<-EOF
   config.warden do |manager|
     manager.failure_app = TurboFailureApp
   end
-  EOF
+    EOF
   end
 
-  environment "config.action_mailer.default_url_options = { host: 'localhost', port: 3000 }", env: 'development'
-  generate :devise, "User", "first_name", "last_name", "announcements_last_read_at:datetime", "admin:boolean"
+  environment "config.action_mailer.default_url_options = { host: 'localhost', port: 3000 }",
+              env: 'development'
+  generate :devise,
+           'User',
+           'first_name',
+           'last_name',
+           'announcements_last_read_at:datetime',
+           'admin:boolean'
 
   # Set admin default to false
   in_root do
-    migration = Dir.glob("db/migrate/*").max_by{ |f| File.mtime(f) }
-    gsub_file migration, /:admin/, ":admin, default: false"
+    migration = Dir.glob('db/migrate/*').max_by { |f| File.mtime(f) }
+    gsub_file migration, /:admin/, ':admin, default: false'
   end
 
-  if Gem::Requirement.new("> 5.2").satisfied_by? rails_version
-    gsub_file "config/initializers/devise.rb", /  # config.secret_key = .+/, "  config.secret_key = Rails.application.credentials.secret_key_base"
+  if Gem::Requirement.new('> 5.2').satisfied_by? rails_version
+    gsub_file 'config/initializers/devise.rb',
+              /  # config.secret_key = .+/,
+              '  config.secret_key = Rails.application.credentials.secret_key_base'
   end
 
-  inject_into_file("app/models/user.rb", "omniauthable, :", after: "devise :")
+  inject_into_file('app/models/user.rb', 'omniauthable, :', after: 'devise :')
 end
 
 def add_authorization
@@ -139,86 +173,92 @@ def add_authorization
 end
 
 def add_jsbundling
-  rails_command "javascript:install:esbuild"
+  rails_command 'javascript:install:esbuild'
 end
 
 def add_javascript
-  run "yarn add expose-loader @popperjs/core bootstrap local-time @rails/request.js esbuild-rails"
+  run 'yarn add expose-loader @popperjs/core bootstrap local-time @rails/request.js esbuild-rails'
 
   if rails_5?
-    run "yarn add @rails/actioncable@pre @rails/actiontext@pre @rails/activestorage@pre @rails/ujs@pre esbuild-rails"
+    run 'yarn add @rails/actioncable@pre @rails/actiontext@pre @rails/activestorage@pre @rails/ujs@pre esbuild-rails'
   end
 end
 
 def add_hotwire
-  rails_command "hotwire:install"
+  rails_command 'hotwire:install'
 end
 
 def copy_templates
-  remove_file "app/assets/stylesheets/application.css"
-  remove_file "app/javascript/controllers/index.js"
-  remove_file "Procfile.dev"
+  remove_file 'app/assets/stylesheets/application.css'
+  remove_file 'app/javascript/controllers/index.js'
+  remove_file 'Procfile.dev'
 
-  copy_file "Procfile"
-  copy_file "Procfile.dev"
-  copy_file ".foreman"
-  copy_file "esbuild.config.js"
-  copy_file "app/javascript/controllers/index.js"
+  copy_file 'Procfile'
+  copy_file 'Procfile.dev'
+  copy_file '.foreman'
+  copy_file 'esbuild.config.js'
+  copy_file 'app/javascript/controllers/index.js'
 
-  directory "app", force: true
-  directory "config", force: true
-  directory "lib", force: true
+  directory 'app', force: true
+  directory 'config', force: true
+  directory 'lib', force: true
 
   route "get '/terms', to: 'home#terms'"
   route "get '/privacy', to: 'home#privacy'"
 end
 
 def add_sidekiq
-  environment "config.active_job.queue_adapter = :sidekiq"
+  environment 'config.active_job.queue_adapter = :sidekiq'
 
-  insert_into_file "config/routes.rb",
-    "require 'sidekiq/web'\n\n",
-    before: "Rails.application.routes.draw do"
+  insert_into_file 'config/routes.rb',
+                   "require 'sidekiq/web'\n\n",
+                   before: 'Rails.application.routes.draw do'
 
   content = <<~RUBY
-                authenticate :user, lambda { |u| u.admin? } do
-                  mount Sidekiq::Web => '/sidekiq'
+    authenticate :user, lambda { |u| u.admin? } do
+      mount Sidekiq::Web => '/sidekiq'
 
-                  namespace :madmin do
-                    resources :impersonates do
-                      post :impersonate, on: :member
-                      post :stop_impersonating, on: :collection
-                    end
-                  end
-                end
-            RUBY
-  insert_into_file "config/routes.rb", "#{content}\n", after: "Rails.application.routes.draw do\n"
+      namespace :madmin do
+        resources :impersonates do
+          post :impersonate, on: :member
+          post :stop_impersonating, on: :collection
+        end
+      end
+    end
+  RUBY
+  insert_into_file 'config/routes.rb',
+                   "#{content}\n",
+                   after: "Rails.application.routes.draw do\n"
 end
 
 def add_announcements
-  generate "model Announcement published_at:datetime announcement_type name description:text"
-  route "resources :announcements, only: [:index]"
+  generate 'model Announcement published_at:datetime announcement_type name description:text'
+  route 'resources :announcements, only: [:index]'
 end
 
 def add_notifications
-  route "resources :notifications, only: [:index]"
+  route 'resources :notifications, only: [:index]'
 end
 
 def add_multiple_authentication
-  insert_into_file "config/routes.rb", ', controllers: { omniauth_callbacks: "users/omniauth_callbacks" }', after: "  devise_for :users"
+  insert_into_file 'config/routes.rb',
+                   ', controllers: { omniauth_callbacks: "users/omniauth_callbacks" }',
+                   after: '  devise_for :users'
 
-  generate "model Service user:references provider uid access_token access_token_secret refresh_token expires_at:datetime auth:text"
+  generate 'model Service user:references provider uid access_token access_token_secret refresh_token expires_at:datetime auth:text'
 
-  template = """
+  template = "
   env_creds = Rails.application.credentials[Rails.env.to_sym] || {}
   %i{ facebook twitter github }.each do |provider|
     if options = env_creds[provider]
       config.omniauth provider, options[:app_id], options[:app_secret], options.fetch(:options, {})
     end
   end
-  """.strip
+  ".strip
 
-  insert_into_file "config/initializers/devise.rb", "  " + template + "\n\n", before: "  # ==> Warden configuration"
+  insert_into_file 'config/initializers/devise.rb',
+                   "  #{template}\n\n",
+                   before: '  # ==> Warden configuration'
 end
 
 def add_database_config
@@ -227,42 +267,52 @@ def add_database_config
 end
 
 def add_whenever
-  run "wheneverize ."
+  run 'wheneverize .'
 end
 
 def add_friendly_id
-  generate "friendly_id"
-  insert_into_file( Dir["db/migrate/**/*friendly_id_slugs.rb"].first, "[5.2]", after: "ActiveRecord::Migration")
+  generate 'friendly_id'
+  insert_into_file(Dir['db/migrate/**/*friendly_id_slugs.rb'].first,
+                   '[5.2]',
+                   after: 'ActiveRecord::Migration')
 end
 
 def stop_spring
-  run "spring stop"
+  run 'spring stop'
 end
 
 def add_sitemap
-  rails_command "sitemap:install"
+  rails_command 'sitemap:install'
 end
 
 def add_bootstrap
-  rails_command "css:install:bootstrap"
+  rails_command 'css:install:bootstrap'
 end
 
 def add_announcements_css
-  insert_into_file 'app/assets/stylesheets/application.bootstrap.scss', '@import "jumpstart/announcements";'
+  insert_into_file 'app/assets/stylesheets/application.bootstrap.scss',
+                   '@import "jumpstart/announcements";'
 end
 
 def add_esbuild_script
-  build_script = "node esbuild.config.js"
+  build_script = 'node esbuild.config.js'
 
-  if (`npx -v`.to_f < 7.1 rescue "Missing")
-    say %(Add "scripts": { "build": "#{build_script}" } to your package.json), :green
+  if begin
+    `npx -v`.to_f < 7.1
+  rescue StandardError
+    'Missing'
+  end
+    say %(Add "scripts": { "build": "#{build_script}" } to your package.json),
+        :green
   else
     run %(npm set-script build "#{build_script}")
   end
 end
 
 def add_esbuild_imports
-  insert_into_file 'app/javascript/application.js', "import './channels/**/*_channel.js'"
+  insert_into_file 'app/javascript/application.js',
+                   "import './channels/**/*_channel.js'"
+end
 
 def add_docker_compose
   template 'docker-compose.yml.erb', 'docker-compose.yml'
@@ -272,6 +322,13 @@ def add_mina_config
   copy_file 'config/puma_prod.rb'
   template 'deploy.rb.erb', 'config/deploy.rb'
 end
+
+def add_cable_ready
+  gem 'cable_ready', '~> 4.5'
+  run 'yarn add cable_ready@4.5'
+
+  gem 'stimulus_reflex', '~> 3.4'
+  run 'yarn add stimulus_reflex@3.4'
 end
 
 # Main setup
@@ -320,16 +377,19 @@ after_bundle do
     end
   end
 
-  say
-  say "Jumpstart app successfully created!", :blue
-  say
-  say "To get started with your new app:", :green
+  say ''
+  say 'Jumpstart app successfully created!', :blue
+  say ''
+  say 'To get started with your new app:', :green
   say "  cd #{original_app_name}"
-  say "  rails db:create db:migrate"
-  say "  rails g noticed:model"
-  say "  rails g madmin:install # Generate admin dashboards"
-  say "  gem install foreman"
-  say "  bin/dev"
+  say ''
+  say '  EDITOR=vim rails credentials:edit'
+  say ''
+  say '  rails db:create db:migrate'
+  say '  rails g noticed:model'
+  say '  rails g madmin:install # Generate admin dashboards'
+  say '  gem install foreman'
+  say '  bin/dev'
   say ''
   say '  update config/deploy.rb (FIXME)'
 end
