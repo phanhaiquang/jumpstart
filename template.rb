@@ -67,6 +67,11 @@ def add_gems
 
   if rails_5?
     gsub_file "Gemfile", /gem 'sqlite3'/, "gem 'sqlite3', '~> 1.3.0'"
+
+  # deployment
+  gem 'mina', '~> 1.2'
+  gem 'mina-multistage', require: false
+
   end
 end
 
@@ -258,6 +263,15 @@ end
 
 def add_esbuild_imports
   insert_into_file 'app/javascript/application.js', "import './channels/**/*_channel.js'"
+
+def add_docker_compose
+  template 'docker-compose.yml.erb', 'docker-compose.yml'
+end
+
+def add_mina_config
+  copy_file 'config/puma_prod.rb'
+  template 'deploy.rb.erb', 'config/deploy.rb'
+end
 end
 
 # Main setup
@@ -316,4 +330,6 @@ after_bundle do
   say "  rails g madmin:install # Generate admin dashboards"
   say "  gem install foreman"
   say "  bin/dev"
+  say ''
+  say '  update config/deploy.rb (FIXME)'
 end
