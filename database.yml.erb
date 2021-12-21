@@ -1,0 +1,28 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%%= ENV['PG_HOST'] || "localhost" %>
+  username: <%%= ENV['PG_USERNAME'] %>
+  password: <%%= ENV['PG_PASSWORD'] %>
+
+development:
+  <<: *default
+  database: <%= original_app_name %>_development
+  username: postgres
+  password: password
+
+test:
+  <<: *default
+  database: <%= original_app_name %>_test<%%= ENV['TEST_ENV_NUMBER'] %>
+  username: postgres
+  password: password
+
+production:
+ adapter: postgresql
+ encoding: utf8
+ database: <%= original_app_name %>_production
+ pool: 30
+ host: <%%= ENV['DATABASE_HOST'] || "localhost" %>
+ username: <%%= ENV['DATABASE_USERNAME'] %>
+ password: <%%= ENV['DATABASE_PASSWORD'] %>

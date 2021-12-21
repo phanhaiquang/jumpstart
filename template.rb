@@ -216,6 +216,11 @@ def add_multiple_authentication
   insert_into_file "config/initializers/devise.rb", "  " + template + "\n\n", before: "  # ==> Warden configuration"
 end
 
+def add_database_config
+  remove_file 'config/database.yml'
+  template 'database.yml.erb', 'config/database.yml'
+end
+
 def add_whenever
   run "wheneverize ."
 end
@@ -282,12 +287,17 @@ after_bundle do
   add_esbuild_script
   add_esbuild_imports
 
-  rails_command "active_storage:install"
+  add_database_config
+  add_docker_compose
+  add_mina_config
+  add_cable_ready
+
+  rails_command 'active_storage:install'
 
   # Commit everything to git
-  unless ENV["SKIP_GIT"]
+  unless ENV['SKIP_GIT']
     git :init
-    git add: "."
+    git add: '.'
     # git commit will fail if user.email is not configured
     begin
       git commit: %( -m 'Initial commit' )
@@ -301,9 +311,6 @@ after_bundle do
   say
   say "To get started with your new app:", :green
   say "  cd #{original_app_name}"
-  say
-  say "  # Update config/database.yml with your database credentials"
-  say
   say "  rails db:create db:migrate"
   say "  rails g noticed:model"
   say "  rails g madmin:install # Generate admin dashboards"
